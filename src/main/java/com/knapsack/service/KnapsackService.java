@@ -5,6 +5,7 @@ import com.knapsack.model.Knapsack.Status;
 import com.knapsack.model.Problem;
 import com.knapsack.model.TimeStamp;
 import com.knapsack.repository.KnapsackReactiveRepository;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -25,59 +26,72 @@ public class KnapsackService {
     this.knapsackReactiveRepository = knapsackReactiveRepository;
   }
 
+  private static void accept(Knapsack x) {}
+
   public Mono<Knapsack> findById(String knapsackId) {
     return knapsackReactiveRepository.findById(knapsackId);
   }
 
   public Mono<Knapsack> saveKnapsackProblem(Knapsack knapsack) {
-    Mono<Knapsack> acknowledgement = knapsackReactiveRepository.save(knapsack);
-    acknowledgement
-        .flatMap(this::calculateSolutionForKnapsack)
-        .subscribeOn(Schedulers.fromExecutor(executor))
-        .doOnError(Throwable::printStackTrace)
-        .subscribe();
-    return acknowledgement;
+    knapsackReactiveRepository
+        .save(knapsack)
+        .single()
+        .subscribe(
+            x -> System.out.println(x.getTaskId() + " task status is " + x.getStatus()),
+            Throwable::printStackTrace,
+            () -> calculateSolutionForKnapsack(knapsack));
+    return Mono.just(new Knapsack());
   }
 
   public void simpleSave(Knapsack knapsack) {
     knapsackReactiveRepository
         .save(knapsack)
         .single()
-        .flatMap(this::calculateSolutionForKnapsack)
-        .subscribeOn(Schedulers.fromExecutor(executor))
-        .doOnError(Throwable::printStackTrace)
-        .doOnSuccess(success -> System.out.println("Item processed"))
-        .subscribe();
+        .subscribe(
+            x -> System.out.println(x.getTaskId() + " task status is " + x.getStatus()),
+            Throwable::printStackTrace,
+            () -> calculateSolutionForKnapsack(knapsack));
   }
 
-  private Mono<Knapsack> calculateSolutionForKnapsack(Knapsack knapsack) {
+  private void calculateSolutionForKnapsack(Knapsack knapsack) {
     knapsack.getTimestamps().setStarted(Instant.now().getEpochSecond());
     knapsack.setStatus(Status.STARTED);
-    knapsackReactiveRepository.save(knapsack);
-    /*try {
-      Thread.sleep(10000);
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }*/
-    Problem problem = knapsack.getProblem();
-    List<Integer> itemsToPutInKnapsack =
-        knapSackAlgo(
-            problem.getCapacity(),
-            problem.getWeights(),
-            problem.getValues(),
-            problem.getValues().length);
-    knapsack.getSolution().setItems(itemsToPutInKnapsack);
-    knapsack.getTimestamps().setCompleted(Instant.now().getEpochSecond());
-    knapsack.setStatus(Status.COMPLETED);
-    knapsack.getSolution().setTime(timeTakenToSolveTheKnapsackProblem(knapsack.getTimestamps()));
-    return knapsackReactiveRepository.save(knapsack);
+    knapsackReactiveRepository
+        .save(knapsack)
+        .delayElement(Duration.ofSeconds(10))
+        .subscribeOn(Schedulers.fromExecutor(executor))
+        .subscribe(
+            x -> System.out.println(x.getTaskId() + " task status is " + x.getStatus()),
+            Throwable::printStackTrace,
+            () -> {
+              Problem problem = knapsack.getProblem();
+              List<Integer> itemsToPutInKnapsack =
+                  knapsackAlgo(
+                      problem.getCapacity(),
+                      problem.getWeights(),
+                      problem.getValues(),
+                      problem.getValues().length);
+              knapsack.getSolution().setItems(itemsToPutInKnapsack);
+              knapsack.getTimestamps().setCompleted(Instant.now().getEpochSecond());
+              knapsack.setStatus(Status.COMPLETED);
+              knapsack
+                  .getSolution()
+                  .setTime(timeTakenToSolveTheKnapsackProblem(knapsack.getTimestamps()));
+              knapsackReactiveRepository
+                  .save(knapsack)
+                  .delayElement(Duration.ofSeconds(10))
+                  .subscribe(
+                      x -> System.out.println(x.getTaskId() + " task status is " + x.getStatus()),
+                      Throwable::printStackTrace,
+                      () -> System.out.println("Processing completed"));
+            });
   }
 
   private Long timeTakenToSolveTheKnapsackProblem(TimeStamp timestamps) {
     return timestamps.getCompleted() - timestamps.getSubmitted();
   }
 
-  List<Integer> knapSackAlgo(int W, int wt[], int val[], int n) {
+  private List<Integer> knapsackAlgo(int W, int wt[], int val[], int n) {
     int i, w;
     int K[][] = new int[n + 1][W + 1];
     // Build table K[][] in bottom up manner
@@ -104,7 +118,7 @@ public class KnapsackService {
     return items;
   }
 
-  int max(int a, int b) {
+  private int max(int a, int b) {
     return (a > b) ? a : b;
   }
 }
