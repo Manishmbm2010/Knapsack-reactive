@@ -18,7 +18,7 @@ import reactor.core.scheduler.Schedulers;
 @Service
 public class KnapsackService {
 
-  Executor executor = Executors.newFixedThreadPool(10);
+  private Executor executor = Executors.newFixedThreadPool(10);
   private KnapsackReactiveRepository knapsackReactiveRepository;
 
   public KnapsackService(KnapsackReactiveRepository knapsackReactiveRepository) {
@@ -34,7 +34,7 @@ public class KnapsackService {
     acknowledgement
         .flatMap(this::calculateSolutionForKnapsack)
         .subscribeOn(Schedulers.fromExecutor(executor))
-        .doOnError(error -> error.printStackTrace())
+        .doOnError(Throwable::printStackTrace)
         .subscribe();
     return acknowledgement;
   }
@@ -45,20 +45,20 @@ public class KnapsackService {
         .single()
         .flatMap(this::calculateSolutionForKnapsack)
         .subscribeOn(Schedulers.fromExecutor(executor))
-        .doOnError(error -> error.printStackTrace())
+        .doOnError(Throwable::printStackTrace)
         .doOnSuccess(success -> System.out.println("Item processed"))
         .subscribe();
   }
 
   private Mono<Knapsack> calculateSolutionForKnapsack(Knapsack knapsack) {
-    try {
-      Thread.sleep(1000);
-    } catch (InterruptedException e) {
-      e.printStackTrace();
-    }
     knapsack.getTimestamps().setStarted(Instant.now().getEpochSecond());
     knapsack.setStatus(Status.STARTED);
     knapsackReactiveRepository.save(knapsack);
+    /*try {
+      Thread.sleep(10000);
+    } catch (InterruptedException e) {
+      e.printStackTrace();
+    }*/
     Problem problem = knapsack.getProblem();
     List<Integer> itemsToPutInKnapsack =
         knapSackAlgo(
