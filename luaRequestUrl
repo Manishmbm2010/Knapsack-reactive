@@ -1,0 +1,1 @@
+wrk -t12 -c10000 -s luaScript.lua http://127.0.0.1:8080/knapsacks
